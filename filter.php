@@ -65,7 +65,7 @@ class filter_ensemble extends moodle_text_filter {
 
         foreach ($urls as $url) {
             $this->ensembleUrl = trim($url);
-            if (stripos($text, $this->ensembleUrl) === false)) {
+            if (stripos($text, $this->ensembleUrl) === false) {
                 // Performance improvement - no matching URL
                 continue;
             }
