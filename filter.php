@@ -35,6 +35,16 @@ class filter_ensemble extends moodle_text_filter {
     public function filter($text, array $options = array()) {
         global $CFG;
 
+        if (!is_string($text) or empty($text)) {
+            // Performance imporovement - can't filter non-strings or empty text
+            return $text;
+        }
+
+        if (stripos($text, '</a>') == false) {
+            // Performance improvement - nothing to match
+            return $text;
+        }
+
         $newtext = $text;
 
         if (!isset($CFG->filter_ensemble_urls)) {
@@ -55,6 +65,10 @@ class filter_ensemble extends moodle_text_filter {
 
         foreach ($urls as $url) {
             $this->ensembleUrl = trim($url);
+            if (stripos($text, $this->ensembleUrl) === false)) {
+                // Performance improvement - no matching URL
+                continue;
+            }
             $search = '#<a [^>]*href="' . $this->ensembleUrl . '\?([^"]*)".*</a>#isU';
             $newtext = preg_replace_callback($search, array('filter_ensemble', 'callback'), $newtext);
         }
