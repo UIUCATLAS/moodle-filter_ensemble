@@ -40,8 +40,8 @@ class filter_ensemble extends moodle_text_filter {
             return $text;
         }
 
-        if (stripos($text, '</a>') == false) {
-            // Performance improvement - nothing to match
+        if (stripos($text, 'ensemble') == false) {
+            // Performance improvement - nothing to match. 'ensemble.illinois.edu' is part of the URL.
             return $text;
         }
 
@@ -51,27 +51,11 @@ class filter_ensemble extends moodle_text_filter {
             set_config('filter_ensemble_urls', '');
         }
 
-        $urls = explode(',', $CFG->filter_ensemble_urls);
-
-        $repos = repository::get_instances(array(
-            'currentcontext' => $this->context,
-            'type' => 'ensemble'
-        ));
-
-        // Add the currently configured repository urls for this context.
-        foreach ($repos as $repo) {
-            $urls[] = $repo->get_option('ensembleURL');
-        }
-
-        foreach ($urls as $url) {
-            $this->ensembleUrl = trim($url);
-            if (stripos($text, $this->ensembleUrl) === false) {
-                // Performance improvement - no matching URL
-                continue;
-            }
-            $search = '#<a [^>]*href="' . $this->ensembleUrl . '\?([^"]*)".*</a>#isU';
-            $newtext = preg_replace_callback($search, array('filter_ensemble', 'callback'), $newtext);
-        }
+		// Old Liam code.
+        if ($CFG->filter_ensemble_enable) {
+			$search = array('#<a href="https://ensemble.illinois.edu/app/atlasplayer/embed.aspx\?videoid=([^"]*)".*?</a>#is', '#<div[^>]*? id="ensembleEmbeddedContent_([^"]*)"[^>]*>.*?<\/div>#is');
+        	$newtext = preg_replace_callback($search, array('filter_ensemble','callback'), $newtext);
+  		} 
 
         if (is_null($newtext) or $newtext === $text) {
             return $text;
@@ -80,27 +64,70 @@ class filter_ensemble extends moodle_text_filter {
         return $newtext;
     }
 
+	// Liam's old callback
     private function callback($matches) {
-        $settings = array();
-        $urldecoded = urldecode($matches[1]);
-        $entitydecoded = html_entity_decode($urldecoded);
-        parse_str($entitydecoded, $settings);
-        if (isset($settings['type'])) {
-            if ($settings['type'] === 'video') {
-                $width = isset($settings['width']) ? $settings['width'] : 640;
-                $height = isset($settings['height']) ? $settings['height'] : 360;
-                $source = $this->ensembleUrl . '/app/plugin/embed.aspx?ID=' . $settings['id'] . '&autoPlay='
-                . $settings['autoplay'] . '&displayTitle=' . $settings['showtitle'] . '&hideControls=' . $settings['hidecontrols']
-                . '&showCaptions=' . $settings['showcaptions'] . '&width=' . $width . '&height=' . $height;
-                return '<iframe src="' . $source . '" frameborder="0" style="width: ' . $width . 'px;height:' . ($height + 56)
-                . 'px;" allowfullscreen></iframe>';
-            } else if ($settings['type'] === 'playlist') {
-                $source = $this->ensembleUrl . '/app/plugin/embed.aspx?DestinationID=' . $settings['id'];
-                return '<iframe src="' . $source . '" frameborder="0" style="width:800px;height:1000px;" allowfullscreen></iframe>';
-            }
-        } else if (isset($settings['content'])) {
-            return $settings['content'];
-        }
-    }
+		// This callback function should first perform an ensemble API call
+		// so we can get correct dimensions for the video
+		//
+		global $CFG;
+		$ensembleURL = $CFG->filter_ensemble_url;//'https://ensemble.illinois.edu';
+			// Let's get other potential parameters, eh?
+		$embedInfo = explode('&',$matches[count($matches) - 1]);
+		$videoID = $embedInfo[0];
+		$otherParams = '';
+		$width = 0;
+		$height = 0;
+		if (sizeof($embedInfo) > 1)
+		{
+		  for ($i=1; $i<sizeof($embedInfo); $i++)
+		  {
+			$atvalpair = explode('=',$embedInfo[$i]);
+			// get rid of amp; at start of attribute string
+			if (substr($atvalpair[0],0,4) == 'amp;')
+			{
+			$atvalpair[0] = substr($atvalpair[0],4);
+			}
+			if ($atvalpair[0] == 'height' || $atvalpair[0] == 'videoHeight')
+			{
+			  $height = $atvalpair[1];
+			} else if ($atvalpair[0] == 'width' || $atvalpair[0] == 'videoWidth')
+			{
+			  $width = $atvalpair[1];
+				} else
+				{
+			  $otherParams = $otherParams . ' data-' . $atvalpair[0] . '="' . $atvalpair[1] . '"';
+			}
+			  }
+		}
+		$ensemble_query_URL = $ensembleURL . '/app/simpleAPI/video/show.xml/' . $videoID;
+		$c = new curl();
+		$response = $c->get($ensemble_query_URL);
+		$xml = simplexml_load_string($response);
+		if (!$width) // We want to allow people to set 0 height
+		{
+			$dimensions = $xml->videoEncodings->dimensions;
+			if ($dimensions == 'x')
+			{
+				$dimarray = array('480','0');
+			} else {
+				$dimarray = explode('x',(string)$dimensions);
+			}
+			$width = (string)$dimarray[0];
+			$height = (string)$dimarray[1];
+			// Let's make high def stuff sanely sized in the page
+			if ((int)$width > 640)
+			{
+				$width = '640';
+				$height = (string)floor((float)$width/((float)$dimarray[0]/(float)$height));
+			}
+			// Cleanup forced audio sizing...
+			if ($height == '26') {
+				$height = '0';
+			}
+		}
+		return '<div webkitallowFullScreen="true" mozallowFullScreen="true" msallowFullScreen="true" data-videoId="' . $videoID . '" data-autoplay="false" data-captions="false" data-videoWidth="' . $width . '" data-videoHeight="' . $height . '" ' . $otherParams . ' ><script type="text/javascript" src="' . $ensembleURL .'/app/atlasplayer/atlasplayer.js" defer="defer"></script></div>' ;
+		// end callback
+		}
+	}
 
 }
