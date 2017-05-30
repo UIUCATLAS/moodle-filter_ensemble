@@ -127,7 +127,6 @@ class filter_ensemble extends moodle_text_filter {
 		}
 		return '<div webkitallowFullScreen="true" mozallowFullScreen="true" msallowFullScreen="true" data-videoId="' . $videoID . '" data-autoplay="false" data-captions="false" data-videoWidth="' . $width . '" data-videoHeight="' . $height . '" ' . $otherParams . ' ><script type="text/javascript" src="' . $ensembleURL .'/app/atlasplayer/atlasplayer.js" defer="defer"></script></div>' ;
 		// end callback
-		}
 	}
 
 }
